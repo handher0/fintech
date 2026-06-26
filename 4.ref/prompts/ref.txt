@@ -1,0 +1,192 @@
+# 챗봇 Streamlit 애플리케이션 생성 프롬프트
+
+다음 요구사항에 따라 Streamlit 기반의 숭실대학교 챗봇 애플리케이션을 만들어주세요.
+
+
+# 생성 파일명
+- ref.py
+
+## 1. 기본 설정
+
+### 1.1 페이지 설정
+- 페이지 제목: "숭실대학교 챗봇"
+- 페이지 아이콘: "📚"
+- 레이아웃: "wide"
+
+### 1.2 필요한 라이브러리
+```python
+import os
+import streamlit as st
+import tempfile
+from dotenv import load_dotenv
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_community.vectorstores import FAISS
+from typing import Any
+from openai import OpenAI
+from datetime import datetime
+import logging
+import re
+```
+
+### 1.3 로깅 설정
+- logs 디렉토리에 일별 로그 파일 생성 (chatbot_YYYYMMDD.log)
+- HTTP 요청 로그 비활성화 (httpx, httpcore, urllib3, openai, langchain, langchain_openai)
+- INFO 레벨 로그는 출력하지 않음 (ERROR, WARNING만)
+
+## 2. UI 구성
+
+### 2.1 상단 헤더
+- 왼쪽: 로고 이미지 (logo.png 파일 사용, 없으면 기본 아이콘, width=180)
+- 중앙: "숭실대학교 챗봇" 제목 (<div> 태그 사용, 4rem 크기, !important 필수, "숭실대학교"는 청색, "챗봇"은 노랑색)
+- 오른쪽: 여백
+
+### 2.2 CSS 스타일
+- h1: 분홍색 (#ff69b4), 1.4rem
+- h2: 노랑색 (#ffd700), 1.2rem
+- h3: 청색 (#1f77b4), 1.1rem
+- 채팅 메시지 스타일링
+- 버튼 스타일: 분홍색 배경
+
+### 2.3 사이드바 구성 (구분선 없음)
+1. **LLM 모델 선택**
+   - 라디오 버튼으로 선택
+   - 옵션: "gpt-4o-mini", "gemini-3-pro-preview", "claude-sonnet-4-5"
+   - 기본값: "gpt-4o-mini"
+
+2. **인터넷 검색 선택**
+   - 라디오 버튼으로 선택
+   - 옵션: "사용 안 함", "OpenAI 웹 검색 (GPT-5 nano)"
+   - 기본값: "사용 안 함"
+
+3. **RAG (PDF 검색) 선택**
+   - 라디오 버튼으로 선택
+   - 옵션: "사용 안 함", "RAG 사용"
+   - 기본값: "사용 안 함"
+
+4. **PDF 파일 업로드**
+   - 다중 파일 업로드 지원
+   - "파일 처리하기" 버튼
+   - 처리된 파일 목록 표시
+
+5. **대화 초기화 버튼**
+
+6. **현재 설정 표시**
+   - 모델, 인터넷 검색, RAG 상태
+   - 처리된 파일 수, 대화 기록 수
+   - st.text()로 표시 (st.info() 사용 안 함)
+
+## 3. 핵심 기능
+
+### 3.1 LLM 모델 선택 함수
+```python
+def get_llm(model_name: str, temperature: float = 0.7) -> Any:
+    - gpt-4o-mini: ChatOpenAI 사용
+    - claude-sonnet-4-5: ChatAnthropic 사용
+    - gemini-3-pro-preview: ChatGoogleGenerativeAI 사용 (GOOGLE_API_KEY 필요)
+```
+
+### 3.2 구분선 및 취소선 제거 함수
+```python
+def remove_separators(text: str) -> str:
+    - 취소선(~~텍스트~~) 제거
+    - 구분선(---, ===, ___) 제거
+    - 연속된 빈 줄 정리
+```
+
+### 3.3 OpenAI 웹 검색 함수 (GPT-5 nano, Responses API)
+- 웹 검색은 OpenAI **Responses API** 의 내장 도구 `web_search` 로 수행한다. 모델: **`gpt-5-nano`**. API 키: **`OPENAI_API_KEY`** (Perplexity / `PERPLEXITY_API_KEY` 사용 안 함).
+- 구현은 **`openai` Python SDK** 권장: `OpenAI().responses.create(model="gpt-5-nano", input=..., tools=[{"type": "web_search"}], previous_response_id=...)` . 멀티턴 시 직전 `response.id` 를 `previous_response_id` 로 넘긴다.
+- **알려진 오류 (반드시 회피):** `langchain_openai.ChatOpenAI.bind_tools([{"type": "web_search"}])` 는 설치된 LangChain 버전에 따라 호스팅 도구 dict 를 OpenAI **함수** 스키마로 변환하려다 **`ValueError: Unsupported function`** 이 난다. 웹 검색 경로에서는 `bind_tools` 로 `web_search` 를 넘기지 말고 SDK `responses.create` 를 사용한다.
+- 시스템/프롬프트에 헤딩 구조화 지시 포함 가능
+- 대화 기록 관리 (user/assistant 교차 또는 `previous_response_id` 체인)
+- h1, h2, h3로 구조화된 답변 생성
+- 응답 본문이 블록 리스트·`url_citation` 형태일 수 있으므로 UI 표시용으로 텍스트·출처를 가공한다.
+
+### 3.4 PDF 처리
+- PyPDFLoader 사용
+- RecursiveCharacterTextSplitter (chunk_size=500, chunk_overlap=100)
+- FAISS 벡터 스토어
+- 배치 처리 (batch_size=30)
+- 검색 결과 수: k=10
+
+## 4. 답변 생성 로직
+
+### 4.1 우선순위
+1. 인터넷 검색이 "OpenAI 웹 검색 (GPT-5 nano)"이면 → Responses API `web_search` 검색 사용
+2. 인터넷 검색이 "사용 안 함"이고:
+   - RAG가 "사용"이고 PDF 파일이 있으면 → RAG 사용
+   - RAG가 "사용"이지만 PDF 파일이 없으면 → 경고 메시지
+   - RAG가 "사용 안 함"이면 → 직접 LLM 사용
+
+### 4.2 답변 형식 요구사항
+모든 답변에 다음 지시 포함:
+- 답변은 반드시 헤딩(# ## ###)을 사용하여 구조화
+- 주요 주제는 # (H1)로, 세부 내용은 ## (H2)로, 구체적 설명은 ### (H3)로 구분
+- 답변은 서술형으로 작성하되 존대말 사용
+- 완전한 문장으로 서술
+- 구분선(---, ===, ___) 사용 금지
+- 취소선(~~텍스트~~) 사용 금지
+- 참조 표시나 출처 문구 사용 금지
+
+### 4.3 스트리밍 모드
+- RAG 답변: 스트리밍으로 실시간 표시
+- 직접 LLM 답변: 스트리밍으로 실시간 표시
+- OpenAI 웹 검색(GPT-5 nano): 기본은 `responses.create` 완료 후 한 번에 표시(필요 시 SDK 스트리밍 API 별도 검토). RAG/직접 LLM 과 동일한 스트리밍 UX를 강제하지 않아도 된다.
+- 스트리밍 중에도 구분선 제거 적용
+
+### 4.4 다음 질문 3개 자동 생성
+- 모든 답변 생성 후 자동으로 다음 질문 3개 생성
+- 답변 끝에 "### 💡 다음에 물어볼 수 있는 질문들" 섹션 추가
+- 번호와 함께 질문 표시
+
+## 5. 대화 관리
+
+### 5.1 대화 기록
+- st.session_state.chat_history에 저장
+- st.markdown()으로 표시 (헤딩 색상 적용)
+
+### 5.2 대화 맥락 메모리
+- conversation_memory에 최근 50개 대화 저장
+- RAG 답변 생성 시 이전 대화 맥락 포함
+
+## 6. 특수 기능
+
+### 6.1 구분선/취소선 제거
+- 모든 답변에서 자동으로 구분선과 취소선 제거
+- remove_separators() 함수 사용
+
+### 6.2 헤딩 색상 스타일링
+- CSS로 h1, h2, h3 각각 다른 색상 적용
+- st.markdown()으로 표시하여 색상 적용
+
+### 6.3 로깅
+- 파일 로그와 콘솔 로그 모두 기록
+- ERROR, WARNING만 기록 (INFO는 기록 안 함)
+- HTTP 요청 로그는 비활성화
+
+## 7. 에러 처리
+- 모든 예외 상황에 대한 적절한 에러 메시지 표시
+- 로그에 에러 기록
+- 사용자에게 친화적인 에러 메시지
+
+## 8. 환경 변수
+- OPENAI_API_KEY: 필수 (채팅용 LLM·임베딩·**웹 검색(GPT-5 nano)** 공통)
+- GOOGLE_API_KEY: Gemini 사용 시 필요
+- LLM 사용을 위한 API KEY는 .env에 있으니 반드시 python-dotenv의 load_dotenv()를 사용해 로드하세요.
+- .env 경로는 AI-Project/.env 입니다. 실행 위치와 무관하게 절대경로 기준으로 명시적으로 로드하세요.
+- 환경변수가 없으면 예외로 종료하지 말고 사용자에게 키 누락 메시지를 보여주세요.
+
+## 9. 파일 구조
+- 로고 파일: logo.png (프로젝트 루트)
+- 로그 파일: logs/chatbot_YYYYMMDD.log
+
+## 10. 구현 시 주의사항
+- 모든 답변은 스트리밍 모드로 생성 (OpenAI 웹 검색 경로는 예외 가능)
+- 답변 표시는 st.markdown() 사용 (헤딩 색상 적용)
+- 구분선과 취소선은 자동으로 제거
+- 다음 질문 3개는 모든 답변에 자동 추가
+- INFO 레벨 로그는 출력하지 않음
+- 사이드바에 구분선(st.divider()) 사용 안 함
+- 현재 설정은 st.text()로 표시 (st.info() 사용 안 함)

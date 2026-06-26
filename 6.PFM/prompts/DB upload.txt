@@ -1,0 +1,46 @@
+# 역할
+너는 이미 통합 완료된 금융 마이데이터 CSV를 안전하게 클라우드로 이관하는 핀테크 데이터 엔지니어다.
+로컬에 이미 머지되어 있는 2026년 1월~5월 가계부 통합 CSV 파일(`user_card_history_merged.csv`)을 기반으로, Supabase 클라우드 데이터베이스에 테이블을 생성하는 SQL 파일과 데이터를 배치(Batch) 업로드하는 Python 스크립트 파일을 각각 분리하여 생성하라.
+
+# 프로젝트 구조 및 경로 (고정)
+프로젝트 루트: ./6.PFM/
+- data/user_card_history_merged.csv  → 이미 1월~5월 내역이 병합 완료되어 있는 읽기 전용 마스터 CSV 파일
+- code/create_table.sql             → [신규 생성] Supabase 테이블 생성용 DDL 쿼리가 담긴 SQL 파일
+- code/build_pfm_db.py              → [신규 생성] 데이터 업로드용 파이썬 스크립트 파일
+
+# 입력 CSV 데이터 스펙 및 구조 (우리 가계부 데이터셋)
+- 파일 경로: `./6.PFM/data/user_card_history_merged.csv`
+- 컬럼 구조 (순서 고정): `month`, `Approved_Num`, `Approved_DateTime`, `Card_Name`, `Store_Name`, `Category`, `Amount_KRW`
+
+# 프로그램 최종 산출물 및 흐름 (★핵심 요구사항)
+너는 채팅창에 텍스트로만 출력하지 말고, 반드시 아래 2개의 개별 파일을 지정된 경로에 물리적으로 생성해야 한다.
+
+1. [code/create_table.sql 파일 생성]: 내가 Supabase SQL Editor에서 복사하여 직접 실행할 수 있도록, `user_card_history` 테이블을 생성하는 DDL 문만 포함된 순수 SQL 파일을 작성할 것.
+2. [code/build_pfm_db.py 파일 생성]: 테이블이 이미 Supabase에 존재한다고 가정하고, 오직 CSV 데이터 로드, 전처리, Bulk Insert 기능만 수행하는 파이썬 코드를 작성할 것.
+
+# 데이터 전처리 및 클린징 필수 규칙 (★ 파이썬 코드에 적용)
+- [Total 행 및 유효성 필터링]: 데이터프레임 내에서 첫 번째 열(`month` 컬럼)의 값이 "Total"인 행이 잔재해 있다면 실제 결제 데이터가 아니므로 반드시 필터링하여 제외(Skip)하라. 또한 `Amount_KRW`(가격) 컬럼의 값이 0 이거나 Null, NaN, 빈 문자열 ""인 행도 모두 업로드 대상에서 완전히 삭제(제외)하라.
+- [클라우드 규격 정제]: Supabase(PostgreSQL) 및 JSON 프로토콜은 NaN 및 무한대 값(inf, -inf)을 처리하지 못하므로, pandas나 numpy 등을 활용하여 해당 결측치가 발견되면 모두 None(Python의 None)으로 치환하여 업로드 패키지를 안전하게 빌드하라.
+- [배치 업로드]: 데이터를 한 번에 모두 올리지 말고, 1,000개 단위의 청크(Chunk)로 쪼개어 Supabase 테이블에 Bulk Insert 하라.
+
+# Supabase 테이블 설계 스펙 (★ SQL 파일 작성 시 적용)
+1. 테이블명: `user_card_history`
+2. 컬럼 구조 (모든 컬럼 NULL 허용):
+   - month TEXT
+   - approved_num TEXT
+   - approved_date_time TEXT
+   - card_name TEXT
+   - store_name TEXT
+   - category TEXT
+   - amount_krw REAL
+
+# 파이썬 코드 품질 및 패키지 의존성 요구사항
+- 기능별 함수 단위 구조 설계 및 `if __name__ == "__main__": main()` 실행문 필수 포함.
+- 진행 상황을 알 수 있도록 터미널에 상세한 로그(print)를 출력할 것.
+- 의존성 에러 방지: 코드 최상단에서 `supabase` 또는 `pandas` 모듈을 import 할 때 try-except 블록을 사용하여 패키지 누락 시 터미널에 "[오류] 필요 라이브러리가 없습니다. 'pip install supabase pandas'를 실행해주세요."라는 메시지를 출력하고 종료되도록 할 것.
+- Supabase 연결 정보(`SUPABASE_URL`, `SUPABASE_KEY`)는 환경변수로 받거나 임시 문자열 변수로 비워두어 내가 직접 입력할 수 있게 할 것.
+
+# 파이썬 실행 방법 주석 명시
+`code/build_pfm_db.py` 코드의 맨 위쪽 Docstring 주석에 아래 실행 방법과 패키지 설치 명령어를 눈에 띄게 적어둘 것:
+1. 패키지 설치: pip install supabase pandas
+2. 실행 명령어: python code/build_pfm_db.py

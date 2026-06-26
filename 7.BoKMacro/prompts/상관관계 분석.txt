@@ -1,0 +1,84 @@
+# 역할
+너는 Python 기반 금융 데이터 사이언티스트이자, 거시경제 지표 간의 상호작용과 인과관계를 통계적으로 분석하는 핀테크 솔루션 개발자다.
+1단계에서 연동한 한국은행 ECOS API 데이터를 기반으로 원/달러 환율, 기준금리, 소비자물가지수(CPI) 간의 시계열 데이터를 결합(Merge)하고, 지표 간의 '상관계수 행렬(Correlation Matrix)' 연산 및 다차원 복합 시각화를 수행하며, 자연어로 통계적 의미를 해석해 주는 "Streamlit 기반 거시경제 지표 상관관계 분석 시스템(analyze_correlation.py)" 소스코드를 작성하라.
+
+# 핵심 구현 목표 (★ 데이터 왜곡 없는 시계열 정렬 및 결합)
+일별 데이터(환율)와 월별 데이터(금리, 물가)의 주기가 서로 다르므로, 통계적 상관관계를 연산하기 위해 월별 평균(Monthly Average) 또는 선형 보간(Interpolation)을 통해 데이터 주기를 완벽히 일치시킨 통합 데이터프레임을 생성하고, 이에 대한 통계 연산 및 Plotly/Seaborn 시각화 렌더링을 구현하라.
+
+# 프로젝트 구조 및 경로 (고정)
+프로젝트 루트: ./fintech/7.BoKMacro/
+- code/analyze_correlation.py       → Streamlit 상관관계 분석 프로그램 (구현 완료)
+- output/charts/                     → 분석용 정적 히트맵 및 산점도 PNG 이미지 파일 저장 경로
+
+# Python 패키지 의존성 (고정)
+- 필수 설치: `streamlit`, `plotly`, `matplotlib`, `seaborn`, `python-dotenv`, `openai`, `pandas`, `requests`, `numpy`
+- **scipy는 사용하지 않는다.** OLS 선형 추세선은 `numpy.polyfit()`(기울기·절편)과 `numpy.corrcoef()`(상관계수 R)로 구현하여 별도 패키지 설치 부담을 줄인다.
+- pandas 설치 시 numpy는 함께 설치되는 경우가 많으므로, `ModuleNotFoundError: scipy` 오류가 나더라도 scipy를 추가하지 말고 numpy 기반 구현을 유지하라.
+
+# 환경 변수 및 .env 파일 로드 방어 규칙 (1단계와 동일 스펙 유지)
+1. `Path(__file__).resolve().parent.parent`를 활용하여 절대경로 기준으로 `.env` 파일을 탐색 및 로드하라 (`ECOS_API_KEY`, `OPENAI_API_KEY` 병합 및 유효성 검증).
+2. Key 누락 시 `st.error` 경고창을 띄우고 앱 구동을 안전하게 차단하라.
+
+# 한국은행 Open API (ECOS) 호출 및 데이터 동기화(Data Alignment) 규칙
+- 수집 대상 및 통계코드(1차 및 Fallback 매커니즘)는 1단계 규칙을 엄격히 계승한다.
+- 조회 구간: **2025년 1월 ~ 현재** (상관관계 신뢰도를 높이기 위해 2025년부터 데이터 수집)
+- **[시계열 결합(Resampling & Merge) 핵심 로직]**:
+  * 환율(일별) 데이터는 Pandas의 `.resampling('M').mean()`을 활용하여 월평균 데이터로 변환하거나, 날짜형(DATE) 컬럼 기준으로 월별(YYYY-MM) 매핑을 수행하라.
+  * 기준금리 및 CPI(월별) 데이터와 환율(월평균) 데이터를 `month(YYYY-MM)` 컬럼을 기준으로 `how='inner'` 결합하여 공백 없는 단일 마스터 데이터프레임을 구축하라.
+  * 수집된 지표 데이터는 분석 정확도를 위해 원본 지수 외에 **'전월 대비 증감률(MoM %)'** 및 **'전년동월 대비 증감률(YoY %)'** 파생 변수를 내부적으로 자동 산출하라.
+
+# 필수 UI 및 시각화 기능 요구사항
+
+1. 상단 타이틀 및 분석 데이터 요약 영역
+   - 타이틀: "📊 거시경제 지표 간 상관관계 분석 및 통계 시각화"
+   - 상단에 결합된 데이터의 총 분석 개월 수, 각 지표별 최신 통계 요약(평균, 표준편차)을 `st.dataframe` 및 요약 카드로 컴팩트하게 노출하라.
+
+2. 중앙 대화형 분석 영역 (AI 통계 해석 챗봇 UI)
+   - `st.chat_message`와 `st.chat_input` 기반의 채팅 인터페이스를 구축하라. (입력창 안내: "금리 인상이 환율과 물가에 미치는 영향에 대해 질문하세요.")
+   - 채팅 입력창 위에 **추천 질문 3가지**를 버튼(`st.button`, `use_container_width=True`)으로 노출하고, 클릭 시 해당 질문이 즉시 전송되도록 구현하라.
+   - 추천 질문 (고정):
+     1) "금리와 환율의 상관관계가 어때?"
+     2) "최근 물가가 오를 때 환율은 어떻게 움직였어?"
+     3) "기준금리, 환율, CPI YoY 중 상관관계가 가장 강한 지표 쌍은 무엇이야?"
+   - 사용자가 위 추천 질문 또는 자유 질문을 입력하면, 결합된 데이터프레임에서 연산된 **피어슨·스피어만 상관계수** 수치를 기반으로 LLM이 통계적 사실을 해석하도록 하라.
+   - LLM 페르소나: "너는 복잡한 계량경제학 통계 수치를 일반 투자자도 이해하기 쉽게 풀어 설명해 주는 금융 데이터 사이언스 연구원이다."
+   - 답변 양식 제한: 일반 문단 텍스트와 불렛 리스트(-)만 허용 (`#`, `**`, `` ` `` 등 마크다운 태그 사용 금지 및 후처리 적용).
+
+3. 상관관계 분석용 다차원 시각화 시스템 (핵심)
+   챗봇 답변 하단 또는 메인 화면 탭(Tab) 구조를 통해 다음 3가지 분석 목적별 차트를 Plotly 인터랙티브 그래프로 제공하라.
+
+   ### (1) 지표 간 상관계수 히트맵 (Correlation Heatmap)
+   - 분석 대상: 환율, 기준금리, CPI 지수, CPI YoY 변동률
+   - 시각화: Plotly `imshow` 또는 Seaborn 히트맵을 활용하여 -1부터 1까지의 상관계수를 컬러맵(예: RdBu, Viridis)으로 표현하고, 셀 내부에 수치(소수점 2자리)를 텍스트로 명시하라.
+   - 라벨 겹침 방지: 축 이름을 한글 지표명으로 명확히 표기하라.
+
+   ### (2) 이중 축 시계열 복합 대조 차트 (Dual-Axis Line Chart)
+   - 시각화: 사용자가 비교하고자 하는 두 가지 지표(예: 기준금리 vs 원/달러 환율)를 선택하면, 한 차트 안에서 좌측 Y축과 우측 Y축으로 나누어 시계열 흐름을 오버랩하여 보여주는 차트.
+   - 라벨 가독성: X축은 날짜 포맷(`%Y-%m`)을 적용하고, 주요 눈금 간격을 월별(`dtick="M2"`, `tickangle=-30`)로 제한하여 라벨이 절대 겹치지 않게 하라.
+
+   ### (3) 지표 간 분산 및 산점도 (Scatter Plot with Trendline)
+   - 시각화: x = 선택 지표 A, y = 선택 지표 B로 설정된 산점도 그래프. 
+   - 기능: 두 지표 간의 관계를 명확히 보여주는 선형 회귀 트렌드선(Ordinary Least Squares, OLS 선형 추세선)을 차트 내에 포함하라.
+   - OLS 구현: `scipy.stats.linregress` 대신 **`numpy.polyfit(x, y, 1)`** 과 **`numpy.corrcoef(x, y)`** 를 사용하라. 추세선 범례에는 R 값을 소수점 2자리로 표기하라.
+
+   ### (4) 정적 백업 기능
+   - 리포트 삽입 용도로 Matplotlib을 이용해 `output/charts/corr_{타임스탬프}.png` 형태로 차트를 백업 저장하는 내부 함수 구조를 마련하라.
+
+4. 사이드바 제어 패널
+   - LLM 모델 선택 컴포넌트, 대화 초기화 버튼 구현.
+   - **[통계 분석 옵션 선택]**: 피어슨(Pearson) 외에 스피어먼(Spearman) 상관계수 알고리즘을 선택할 수 있는 라디오 버튼을 제공하여 데이터 분석의 전문성을 높여라.
+
+5. 예외 처리 방어 규칙
+   - 지표 간에 결측치(NaN)가 발생하여 상관계수가 `nan`으로 계산되는 경우, 스크립트가 멈추지 않도록 `.dropna()` 처리를 엄격히 수행한 후 연산하도록 방어 코드를 작성하라.
+
+# 최종 산출물 파일명:
+./fintech/7.BoKMacro/code/analyze_correlation.py
+
+# 실행 방법 (소스 상단 주석 및 README와 동일하게 명시):
+```
+pip install streamlit plotly matplotlib seaborn python-dotenv openai pandas requests numpy
+cd 7.BoKMacro
+streamlit run code/analyze_correlation.py
+```
+- 작업 디렉터리는 `7.BoKMacro` 기준이며, 실행 대상은 `code/analyze_correlation.py`이다.
+- `streamlit run analyze_correlation.py` 단독 실행은 `code/` 폴더 안에서만 사용한다.

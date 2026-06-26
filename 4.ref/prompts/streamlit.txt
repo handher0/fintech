@@ -1,0 +1,97 @@
+# Streamlit UI 컴포넌트 도감 생성 프롬프트
+
+## 프롬프트
+
+다음 요구사항에 따라 Streamlit으로 UI 컴포넌트 도감 애플리케이션을 만들어주세요:
+
+### 목적
+- Streamlit의 주요 UI 컴포넌트들을 시각적으로 보여주는 샘플러/도감 애플리케이션
+- Vibe Coding을 위한 화면 용어 및 시각적 예시 정리
+- 각 컴포넌트의 사용법을 한눈에 볼 수 있도록 구성
+
+### 기술 스택
+- Python
+- Streamlit
+- pandas, numpy (데이터 생성용)
+
+### 페이지 구조
+
+#### 1. 기본 설정
+- 페이지 레이아웃: wide 모드
+- 페이지 제목: "Streamlit Component Sampler"
+- 메인 타이틀: "Streamlit UI 컴포넌트 도감"
+- 캡션: "Vibe Coding을 위한 화면 용어 및 시각적 예시 정리"
+
+#### 2. 사이드바 (st.sidebar)
+- 헤더: "1. 사이드바 영역 (st.sidebar)"
+- 설명 텍스트
+- 라디오 버튼 (st.radio): "모드 선택" - ["학습 모드", "실전 모드"]
+- 구분선 (st.divider)
+- 정보 박스 (st.info)
+
+#### 3. 메인 화면 - 4개 탭 구성
+
+**탭 1: 입력 도구 (Input)**
+- 서브헤더: "사용자 입력 (Input Widgets)"
+- 2열 레이아웃 (st.columns)
+  - 왼쪽 열:
+    - 텍스트 입력 (st.text_input) - 이름 입력, placeholder 포함
+    - 숫자 입력 (st.number_input) - 나이 입력, min/max/기본값 설정
+    - 체크박스 (st.checkbox) - 동의 여부
+  - 오른쪽 열:
+    - 다중 선택 (st.multiselect) - 관심 태그 선택
+    - 슬라이더 (st.slider) - 난이도 조절
+    - 확장기 (st.expander) - 팝업 대체, 내부에 텍스트 입력 포함
+- 구분선
+- 입력값 실시간 확인 (st.write, st.json)
+
+**탭 2: 데이터 (Data)**
+- 서브헤더: "데이터 시각화 (Data & Charts)"
+- 랜덤 데이터 생성 (pandas DataFrame, 10행 3열)
+- 2열 레이아웃 (비율 1:2)
+  - 왼쪽 열:
+    - 데이터프레임 표시 (st.dataframe) - use_container_width=True
+    - 정적 테이블 (st.table) - 상위 3행만
+  - 오른쪽 열:
+    - 라인 차트 (st.line_chart)
+    - 지표 표시 (st.metric) - 3개 지표를 3열로 배치 (온도, 습도, 풍속)
+
+**탭 3: 레이아웃 (Layout)**
+- 서브헤더: "구조 잡기 (Layouts)"
+- 확장기 (st.expander) - "눌러서 내용 보기"
+  - 설명 텍스트
+  - 이미지 표시 (st.image) - Streamlit 로고 URL
+- 컨테이너 (st.container) - border=True 옵션
+  - 설명 텍스트
+  - 버튼 (st.button)
+
+**탭 4: 피드백 (Status)**
+- 서브헤더: "알림 및 상태 (Status)"
+- 성공 메시지 버튼 (st.button)
+  - 클릭 시: st.success, st.toast 표시
+- 로딩 효과 버튼 (st.button)
+  - 클릭 시: st.spinner로 2초 대기 후 완료 메시지
+- 경고 메시지 (st.warning)
+- 에러 메시지 (st.error)
+
+### 코딩 스타일
+- 모든 컴포넌트에 한글 설명과 함께 컴포넌트 이름을 괄호로 표기
+- 예: "이름 입력 (st.text_input)"
+- 주석은 한국어로 작성
+- 각 섹션에 명확한 구분과 설명 포함
+- `use_container_width` will be removed after 2025-12-31.
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+- 최신 Streamlit 버전에서는 width=None을 허용하지 않습니다. 프롬프트에 명시된 대로 width='stretch'로 작성하세요.
+
+### 호환성
+- 최신 Streamlit 버전과 호환되도록 작성
+- st.pills, st.popover 같은 최신 기능 대신 호환성 높은 컴포넌트 사용 (st.multiselect, st.expander)
+
+### 실행 방법
+- `streamlit run ui.py` 명령으로 실행 가능해야 함
+
+---
+
+## 사용 예시
+
+이 프롬프트를 AI에게 제공하면 위의 ui.py와 동일한 구조의 Streamlit 애플리케이션을 생성할 수 있습니다.

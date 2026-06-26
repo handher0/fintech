@@ -1,0 +1,105 @@
+# 역할
+너는 Python 기반 금융 데이터 엔지니어이자, 한국은행 Open API(ECOS)와 LLM 에이전트를 연동하여 거시경제 모니터링 시스템을 구축하는 핀테크 솔루션 개발자다.
+한국은행 ECOS API를 연동하여 원/달러 환율, 기준금리, 소비자물가지수(CPI) 등 핵심 거시경제 데이터를 실시간 호출하고, 이를 가로형 KPI 카드로 노출하며 하단에서는 자연어 대화로 지표를 조회할 수 있는 "Streamlit 기반 AI 거시경제 지표 조회 에이전트 어플리케이션(macro_data.py)" 소스코드를 작성하라.
+
+# 핵심 구현 목표 (★ 절대 인프라/DB 생성 코드를 짜지 말 것)
+너는 오직 한국은행 Open API(ECOS) 호출 래퍼 함수 구현, Streamlit 화면 UI 구성, Plotly 인터랙티브 차트 렌더링, `st.chat_message` 기반의 대화형 경제 지표 에이전트 인터페이스 화면 및 로직을 만드는 데만 집중하라.
+
+# 프로젝트 구조 및 경로 (고정)
+프로젝트 루트: ./fintech/7.BoKMacro/
+- code/macro_data.py                → Streamlit 메인 애플리케이션 소스코드 위치
+- output/charts/                     → 보고서용 정적 차트 PNG 이미지 파일 백업 저장 경로
+- output/reports/                    → 최종 docx 결과 보고서 파일 저장 경로 (확장용)
+
+# 환경 변수 및 .env 파일 로드 방어 규칙 (★ 에러 해결 핵심)
+1. Python 스크립트 실행 위치(Cwd)와 관계없이 `.env` 파일을 안전하게 읽을 수 있도록 `Path(__file__).resolve().parent.parent`로 `7.BoKMacro` 루트(BASE_DIR)와 상위 `fintech` 루트(PROJECT_ROOT)를 계산하라.
+2. 아래 두 경로를 순서대로 탐색하여 존재하는 파일을 모두 로드하라.
+   - `fintech/7.BoKMacro/.env`
+   - `fintech/.env`
+3. 각 `.env` 파일에 대해 `load_dotenv(dotenv_path=..., override=True)`를 호출하고, 보조 파서로 `utf-8-sig` 인코딩으로 `KEY=VALUE` 형식을 직접 파싱하여 `merged` 딕셔너리에 병합하라. (BOM·dotenv 누락 대비)
+4. 최종 키 바인딩은 `os.getenv(...)`와 `merged.get(...)`를 모두 참조하라.
+   - `ECOS_API_KEY`
+   - `OPENAI_API_KEY`
+5. 두 값 중 하나라도 로드에 실패하거나 빈 문자열이라면 `st.error`를 통해 "API Key가 로드되지 않았습니다. .env 파일의 변수명(ECOS_API_KEY)과 파일 경로를 재확인해 주세요."라는 메시지를 띄우고, `st.caption`으로 누락된 변수명 및 확인한 `.env` 절대 경로를 함께 표시한 뒤 하단 챗봇 및 KPI 렌더링을 차단(Safe Limit)하라.
+6. `.env`에는 반드시 아래 두 변수가 모두 저장·저장 완료되어 있어야 한다. (에디터에만 있고 디스크에 없으면 로드 실패)
+   ```
+   ECOS_API_KEY=발급받은_한국은행_API_키
+   OPENAI_API_KEY=발급받은_OpenAI_API_키
+   ```
+
+# 한국은행 Open API (ECOS) 호출 및 URL 포맷 규칙
+- 한국은행 API 호출 주소 구조는 반드시 다음과 같아야 한다:
+  `http://ecos.bok.or.kr/api/StatisticSearch/{ECOS_API_KEY}/json/kr/1/100/{통계표코드}/{주기}/{시작일자}/{종료일자}[/{통계항목코드1}]`
+- URL 생성 시 인증키가 누락되거나 중복 삽입되지 않도록 문자열 포맷팅(`f-string`)을 검증하라.
+- API 호출 시 `requests` 라이브러리를 사용하며, 응답의 `RESULT.CODE`가 `INFO-200`(데이터 없음) 등 오류일 경우 예외 처리하라.
+- 데이터가 정상 수집되면 pandas DataFrame(`TIME`, `DATA_VALUE`, `ITEM_NAME1`, `UNIT_NAME` 등)으로 변환하여 에이전트 분석 컨텍스트로 활용하라.
+- ECOS 응답은 `@st.cache_data(ttl=3600)`으로 캐싱하되, 지표별 폴백 로직은 캐시 바깥 래퍼 함수에서 처리하라.
+
+## 수집 대상 · 통계코드 · 폴백(Fallback) 규칙
+프롬프트 명세 통계코드를 1차로 시도하고, `INFO-200` 또는 빈 DataFrame이면 아래 폴백 코드로 자동 재조회하라.
+
+| 지표 | 1차 통계표코드 | 1차 주기 | 폴백 통계표코드 | 폴백 주기 | 폴백 항목코드 | 설명 |
+|------|---------------|---------|----------------|----------|--------------|------|
+| ① 원/달러 환율 | `022Y013` | D(일) | `731Y001` | D(일) | `0000001` | 원/미국달러(매매기준율) |
+| ② 한국은행 기준금리 | `098Y001` | M(월) | `722Y001` | D(일) | `0101000` | 한국은행 기준금리 |
+| ③ 소비자물가지수(CPI) | `021Y125` | M(월) | `901Y009` | M(월) | `0` | 총지수 |
+
+- 조회·표시 구간: **2026년 1월 ~ 현재** (`20260101` / `202601` ~ 오늘)
+- CPI 전년동월비(YoY) 산출을 위해 API 조회만 `202501` ~ 현재로 확장하되, 차트·챗봇 컨텍스트에는 **2026년 이후** 데이터만 표시하라.
+- ECOS 응답 100건 제한은 페이지네이션(`1/100`, `101/200`, …)으로 구간 내 전체 데이터를 수집하라.
+- 주기별 날짜 포맷: D → `YYYYMMDD`, M → `YYYYMM`
+
+## KPI 산출 규칙
+- 환율: 최신 일별 값, 델타 = 전일 대비 증감(원)
+- 기준금리: 최신 값(%), 델타 = 직전 **변경 시점** 대비 증감(%p) — 일별 동일값 구간은 건너뛰는 step_series 로직 적용
+- CPI: CPI 지수로 전년동월비(YoY) 상승률(%)을 계산하여 KPI에 표시, 델타 = 전월 YoY 대비 증감(%p)
+
+# 필수 UI 및 기능 요구사항
+
+1. 상단 타이틀 및 실시간 거시경제 KPI 영역
+   - 타이틀: "📈 API 기반 환율 및 거시경제 지표 AI 분석 에이전트"
+   - 페이지 로드 시 최신 시점의 데이터를 API로 호출하여 `st.metric`을 가로 레이아웃(`st.columns(3)`)으로 3개 배치하라:
+     ① 현재 원/달러 환율 (예: 1,458.50원, 전일 대비 증감 델타 표시)
+     ② 한국은행 기준금리 (예: 2.50%, 이전 발표 대비 델타 표시)
+     ③ 소비자물가 전년동월비 상승률 (예: 3.1%, 전월 대비 델타 표시)
+   - 각 KPI 하단에 기준일/기준월을 `st.caption`으로 표시하라.
+   - 타이틀 하단에 `데이터 구간: 2026년 1월 ~ 현재 (CPI 전년동월비 산출 시 2025년 동월치 참조)` caption을 표시하라.
+
+2. 중앙 대화형 분석 영역 (AI 경제 챗봇 UI)
+   - `st.chat_message`와 `st.chat_input`을 사용하여 경제 분석 챗봇 화면을 빌드하라. (입력창 안내: "환율, 금리, 물가 등 거시경제 지표에 대해 질문하세요.")
+   - 사용자가 "최근 환율 추이가 어때?" 또는 "현재 한국 기준금리가 몇 퍼센트야?"라고 질문하면, LLM(OpenAI API)이 내부적으로 호출된 DataFrame 컨텍스트를 파싱하여 답변하도록 로직을 구현하라.
+   - LLM 시스템 프롬프트에 "너는 거시경제 지표를 명확하고 거품 없이 분석해 주는 전문 매크로 이코노미스트 비서다" 페르소나를 주입하라.
+   - 답변 양식은 일반 문단 텍스트와 불렛 리스트(-)만 허용하라. (서식 깨짐 방지를 위해 `#`, `**`, `` ` `` 등 마크다운 기호 사용 금지 — `_strip_markdown` 후처리 적용)
+
+3. 지표 동향 시각화 연동 섹션
+   - 사용자가 특정 지표(환율·금리·물가)의 추이·흐름·동향 등을 질문하면, 답변 하단에 Plotly 꺾은선 차트를 동적으로 렌더링하라.
+   - CPI 차트는 CPI 지수(좌축)와 전년동월비(%)(우축) 이중 축으로 표시할 수 있다.
+   - 추후 보고서 확장을 위해 Matplotlib/Seaborn으로 `output/charts/{지표키}_{타임스탬프}.png` 정적 백업 함수를 마련하라. (kaleido 불필요)
+
+   ## 차트 시점(x축) 가독성 규칙 (★ 라벨 겹침 방지)
+   - ECOS `TIME` 원본 문자열(`20260102`, `202601` 등)을 그대로 x축에 쓰지 말고, `datetime`으로 변환한 `DATE` 컬럼을 축 값으로 사용하라.
+   - 일별(D) 데이터:
+     - 표시 포맷: `%Y-%m-%d` (예: 2026-03-01)
+     - Plotly: `nticks=8`, `tickformat="%Y-%m-%d"`, `tickangle=-30`
+     - Matplotlib: `AutoDateLocator(minticks=4, maxticks=8)` + `DateFormatter("%Y-%m-%d")`, `rotation=30`
+   - 월별(M) 데이터:
+     - 표시 포맷: `%Y-%m` (예: 2026-03)
+     - Plotly: `tickformat="%Y-%m"`, `dtick="M1"`
+     - Matplotlib: `MonthLocator()` + `DateFormatter("%Y-%m")`
+   - 모든 데이터 포인트에 라벨을 붙이지 말고, **주요 눈금만** 표시하여 시점이 한눈에 읽히게 하라.
+
+4. 사이드바 제어 패널
+   - LLM 모델 선택 (`gpt-4o`, `gpt-4-turbo`, `gpt-4o-mini`)
+   - OpenAI 실시간 글로벌 금융 트렌드 웹 검색(web_search) 온오프 체크박스
+   - '대화 초기화 (Reset Chat)' 버튼 — `st.session_state.messages` 초기화 후 `st.rerun()`
+   - web_search == True 이고 최신 글로벌 경제 통계를 물어보면, `client.responses.create` + `web_search`/`web_search_preview` 도구로 검색하고 답변 서두에 숫자를 명시하게 프롬프팅하라.
+
+# 최종 산출물 파일명
+./fintech/7.BoKMacro/code/macro_data.py
+
+# 실행 방법 (소스 상단 주석에도 명시)
+```
+pip install streamlit plotly matplotlib seaborn python-dotenv openai pandas requests
+cd 7.BoKMacro
+streamlit run code/macro_data.py
+```

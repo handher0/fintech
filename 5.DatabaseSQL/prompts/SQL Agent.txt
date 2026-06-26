@@ -1,0 +1,54 @@
+# 역할
+너는 Python 기반 핀테크 금융 데이터 분석가이자, LLM과 데이터베이스를 연동하는 AI SQL Agent 시스템을 구축하는 웹 솔루션 엔지니어다.
+이미 구축이 완료된 로컬 SQLite DB(global_fds.db)를 연동하여, 평소에는 사용자와 자연어로 소통하며 SQL을 실행하는 대화형 채팅창으로 동작하고, 실시간으로 보안 관제 차트를 시각화하며, 최종적으로 분석 보고서를 자동 생성 및 다운로드할 수 있는 "Streamlit 기반 AI FDS 관제 에이전트 어플리케이션(app.py)" 소스코드를 작성하라.
+
+# 핵심 구현 목표 (★ 절대 인프라/DB 생성 코드를 짜지 말 것)
+너는 오직 Streamlit 화면 UI 구성, Plotly 인터랙티브 차트 렌더링, st.chat_message 기반의 대화형 SQL 에이전트, 그리고 python-docx를 활용한 보고서 생성 및 다운로드 로직을 만드는 데만 집중하라. (DB 테이블을 새로 만들거나 CSV를 파싱하여 인서트하는 초기화 코드는 완전히 제외한다.)
+
+# 프로젝트 구조 및 경로
+프로젝트 루트: ./5.DatabaseSQL/
+- data/global_fds.db (이미 완벽히 FDS 데이터가 적재되어 있는 읽기 전용 SQLite DB)
+- code/app.py (지금 네가 새로 작성해야 하는 Streamlit 시각화 및 Agent 소스코드)
+- output/charts/ (보고서용 정적 PNG 파일 백업 저장 경로)
+- output/reports/ (docx 결과물 저장 및 다운로드 경로)
+
+# 데이터베이스 연결 및 테이블 정보
+- 연결 라이브러리: sqlite3
+- 대상 테이블: global_payments
+- 컬럼 구조: transaction_id, user_id, timestamp, amount_usd, country, merchant_category, device_ip, is_fraud
+※ 프로그램 구동 시 'sqlite3.connect("./5.DatabaseSQL/data/global_fds.db")' 경로를 바인딩하여 사용자가 던지는 자연어 질문을 SQL 쿼리로 변환해 데이터를 로드하라.
+
+# 필수 UI 및 시각화 기능 요구사항
+
+1. 상단 타이틀 및 리스크 KPI 카드 영역
+   - 타이틀: "🛡️ 글로벌 핀테크 실시간 AI FDS 관제 및 SQL 에이전트 시스템"
+   - st.metric을 가로로 배치하여 '총 모니터링 금액($)', '탐지된 이상거래 건수', '피해 예방 차단 금액($)'을 SQL 카운트 연산하여 직관적인 카드로 노출하라.
+
+2. 중앙 대화형 분석 영역 (SQL Agent 채팅 UI)
+   - st.chat_message와 st.chat_input을 사용하여 챗봇 관제 화면을 빌드하라.
+   - 사용자가 "가장 이상거래가 많이 발생한 국가는 어디야?" 또는 "새벽 시간에 3000달러 이상 결제된 내역을 찾아줘"라고 질문하면 내부적으로 LLM(OpenAI API 등)이 `global_payments` 테이블에 맞는 SQL 쿼리를 생성하게 하라.
+   - LLM이 생성한 SQL을 SQLite DB에 실행한 뒤, 그 결과를 '일반 문단 텍스트'와 '불렛 리스트' 형태로만 답변하도록 프롬프팅하라. (Streamlit 채팅창 내 서식 꼬임 방지를 위해 #, **, ` 등 마크다운 기호 사용을 최소화하거나 금지할 것)
+   - 사용자의 질문 의도나 결과 데이터의 성격에 따라 화면에 Plotly 기반 꺾은선 차트(시간별 추이) 또는 막대 차트(국가별/업종별 비교)를 대화창 내에 즉각 렌더링하라.
+
+3. 그래프 및 리포트 저장 섹션 규칙 (보고서 연계)
+   - 대화 중 화면에 렌더링되는 인터랙티브 차트(Plotly)의 데이터는, 서버 측 정적 저장을 위해 Matplotlib 또는 Seaborn을 활용하여 `./5.DatabaseSQL/output/charts/` 경로에 정적 PNG 이미지로 동시에 생성 및 저장하라. (kaleido 등 무거운 라이브러리 의존성 없이 리포트용 이미지를 확보하기 위함)
+   - 생성된 이미지 파일의 경로는 현재 대화 세션의 상태(session_state)에 기록하여 추후 보고서 생성 시 불러올 수 있도록 하라.
+
+4. 보고서 자동 작성 및 다운로드 기능 (Word/DOCX) ★신규
+   - 사이드바 또는 화면 하단에 `st.button`을 활용하여 '📝 분석 보고서 자동 생성' 버튼을 구현하라.
+   - 해당 버튼 클릭 시 `python-docx` 라이브러리를 사용하여 현재까지의 **① 사용자 질문 내용**, **② LLM의 분석 결과 텍스트**, **③ output/charts/에 저장된 정적 차트 이미지(PNG)**를 조합하여 하나의 공식적인 Word 문서(.docx)로 자동 컴파일하는 함수를 실행하라.
+   - 생성된 문서는 `./5.DatabaseSQL/output/reports/FDS_Analysis_Report.docx` 형식으로 저장하라.
+   - 파일 저장이 완료되면 `st.download_button`을 즉시 화면에 렌더링하여 사용자가 로컬 PC로 해당 DOCX 파일을 다운로드할 수 있도록 완벽히 구현하라.
+
+5. 사이드바 제어 패널
+   - LLM 모델 선택 컴포넌트(예: gpt-4o, gpt-4-turbo 등), OpenAI 실시간 웹 검색(web_search) 온오프 체크박스, 그리고 이전 대화 내역을 모두 지우는 '대화 초기화(Clear Chat)' 버튼을 명확히 구현하라.
+
+6. 환경 변수 로드 안전 규칙
+   - 프로젝트 환경 변수 파일(.env)의 경로를 기준으로 `load_dotenv()`를 수행하되, 만약 API Key가 누락되었을 경우 프로그램이 멈추거나 Crash가 나지 않도록 `st.error`를 통해 화면에 "OpenAI API Key가 설정되지 않았습니다. .env 파일을 확인해주세요."라는 경고 창을 예쁘게 띄우고 작동을 안전하게 제한하라.
+
+# 최종 산출물 파일명:
+./5.DatabaseSQL/code/app.py
+
+# 실행 방법 주석 명시:
+# pip install streamlit plotly matplotlib seaborn python-docx python-dotenv openai sqlite3
+# streamlit run ./5.DatabaseSQL/code/app.py

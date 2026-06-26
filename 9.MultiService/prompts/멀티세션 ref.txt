@@ -1,0 +1,70 @@
+9. 멀티세션 저장기능
+
+#목적
+- supabase를 활용해서 멀티세션이 가능하고 저장이 되도록 하는 RAG 앱을 만듭니다. 
+
+# 파일명
+- multiref.py
+
+# 상세기능
+- Supabase 을 활용해서 세션 저장/로드 기능 추가
+- 자동 저장: 파일 처리 및 대화 후 자동 세션 저장
+- 세션 제목 자동 생성: LLM 기반 제목 생성합니다. 첫번째 질문과 답변을 요약해서 세션명을 만듭니다.
+- 멀티선택 바에서 선택을 하면 자동으로 세션을 로드를 해주세요.
+- 만일 streamlit 을 중지하고 다시 시작해도 이전 대화는 모두 저장해서 다시 불러 사용할 수 있도록 해주세요.
+- vector database도 supabase를 사용해주세요. 따라서 이미 embedding이 된 내용은 다시 사용할 수 있도록 해주세요.
+- 이때 embedding은 openai 를 사용해주세요.
+- 문서에 대해서 질문에 대한 답변을 할 때, 향후 더 필요한 질문3개를 만들어서 답변 마지막에 추가해주세요.
+- 질문을 하면 답변을 모두 완료될때까지 기다려야 하는데, 이것을 stream mode로 변경시켜줘. 즉 내가 질문하면 바로 생성된 답변이 display되도록 하도록 해줘.
+
+# 화면 UI
+- 4.ref/code/ref.py 를 참고해서 UI를 제작해주세요. 로고, 제목, 텍스트 등.
+- LLM을 gpt-4o-mini을 선택하도록 해주세요.
+- model name은 니가 생각하지말고, 반드시 여기 써있는대로 그대로 써주세요.
+- 세션 관리 UI: 사이드바에 세션 선택, 삭제 기능 버튼을 추가합니다. 
+- UI 와 답변, display, color 등은 ref.py를 참고해주세요.
+- 챗봇 이름: "멀티세션 RAG 챗봇" 
+- 버튼종류를 다음과 같이 새로 만든다.
+1. 세션저장 -- 첫번째 질문과 답변으로 세션명을 만들어서 Supabase에저장한다. 이때, 기존에 저장된 것은 그냥 놔두고, INSERT를 해줘. 세션리스트에는 모든 저장한 세션이 있어야 한다. 
+- 세션을 저장할 때, vector database에 있는 것도 저장해줘야해. 
+2. 세션로드 버튼 추가해줘. 내가 원하는 세선을 클릭하고,  세션로드 버튼을 누루면
+해당 세션이 화면에 나타나게 해줘.
+- 그리고 세션로드를 할 때, vector database에 있는 내용도 다시 retrieval 할 수 있게 해줘. 
+3. 세션삭제--- 현재선택된 세션을 지우고, Supabase에 있는 세션도 지운다.
+4. 화면초기화 -- 이것은 현재 화면을 모두 지운고 처음부터 다시 시작한다.
+- 세션 풀다운메뉴에서 특정한 세션명을 클릭하면 해당 세션의 전체 내용이 화면에 나오게 해주세요.
+5. vectordb -- 이것을 누르면 현재 vectordb에 있는 파일명들을 보여주세요.
+
+# sql 만들어주기
+- multi-ssession-ref.sql 에  이 code를 실행하기 위한 DB 셋팅 sql을 써줘. 
+- 처음 시작했다고 생각하고 table creation 부터 끝까지. 
+- 데이터베이스의 이름을 multi-session-ref.sql 로 해주고 이미 파일이 있으면 지우고 시작해줘.
+
+# 제공되는 API_KEY
+- OPENAI_API_KEY
+- SUPABASE_ANON_KEY
+- SUPABASE_URL
+
+- LLM 사용을 위한 API KEY는 .env에 있으니 반드시 python-dotenv의 load_dotenv()를 사용해 로드하세요.
+- .env 경로는 fintech/.env 입니다. 실행 위치와 무관하게 절대경로 기준으로 명시적으로 로드하세요.
+- 환경변수가 없으면 예외로 종료하지 말고 사용자에게 키 누락 메시지를 보여주세요.
+
+# 오류 수정 내역
+## 1. file_name NULL 오류 수정
+- 문제: PDF 처리 시 vector_documents 테이블의 file_name 컬럼에 NULL 값이 저장되어 NOT NULL 제약 조건 위반 오류 발생
+- 원인: SupabaseVectorStore.from_documents()가 메타데이터의 file_name을 file_name 컬럼에 자동 매핑하지 않음
+- 해결 방법:
+  * 각 PDF 파일을 개별적으로 처리하여 분할된 문서에 파일명을 명시적으로 추가
+  * SupabaseVectorStore 대신 Supabase에 직접 저장하여 file_name, session_id, embedding 등을 포함
+  * 배치 처리로 성능 유지 (배치 크기: 10)
+  * 저장 후 SupabaseVectorStore를 검색용으로만 초기화
+
+## 2. RAG 검색 필터 오류 수정
+- 문제: RAG 답변 생성 시 'SyncRPCFilterRequestBuilder' object has no attribute 'params' 오류 발생
+- 원인: SupabaseVectorStore.as_retriever()의 search_kwargs에 filter를 전달하는 방식이 지원되지 않음
+- 해결 방법:
+  * Supabase RPC 함수(match_vector_documents)를 직접 호출하여 세션 ID로 필터링
+  * OpenAI Embeddings로 쿼리 embedding 생성 후 Supabase에 직접 전달
+  * Supabase 응답을 LangChain Document 객체로 변환
+  * RPC 호출 실패 시 일반 retriever 사용 후 필터링하는 대체 방법 제공
+

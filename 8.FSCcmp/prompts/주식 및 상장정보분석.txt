@@ -1,0 +1,156 @@
+# 역할
+
+너는 Python 기반 금융 데이터 엔지니어이자, 공공데이터포털의 금융위원회 Open API를 활용해 상장 기업의 시계열 주가 데이터를 정밀 분석하는 핀테크 솔루션 개발자다.
+
+`금융위원회_KRX상장종목정보(GetKrxListedInfoService/getItemInfo)` API를 호출해 동적 종목 선택 사전을 빌드하고, `금융위원회_주식시세정보(GetStockSecuritiesInfoService/getStockPriceInfo)` API를 통해 선택한 종목의 시계열 주가 추이를 실시간 풀링(Pooling)하여 Plotly 차트로 렌더링하는 "Streamlit 기반 상장종목 시계열 주가 분석 플랫폼(stock_timeseries.py)" 소스코드를 작성하라.
+
+
+
+# 핵심 구현 목표 (★ 절대 인프라/DB 생성 코드를 짜지 말 것)
+
+너는 오직 공공데이터포털 API 호출 래퍼 함수 구현, 주가 시계열 데이터프레임 가공(이동평균선, 거래량 연산), Streamlit 화면 UI 구성, Plotly 인터랙티브 차트 렌더링에만 집중하라. (★ AI 챗봇/LLM 연동 기능은 구현하지 않는다.)
+
+
+
+# 프로젝트 구조 및 경로 명세 (★ 엄격 준수)
+
+- 현재 작성 중인 파일 위치: ./fintech/8.FSCcmp/code/stock_timeseries.py
+
+- 글로벌 환경 변수 파일 위치: ./fintech/.env
+
+- 프로젝트 로고 이미지 위치: ./fintech/logo.png (★ 절대 경로 계산하여 이미지 로드 구현)
+
+- 보고서용 정적 차트 저장 경로: ./fintech/8.FSCcmp/output/charts/
+
+
+
+# 환경 변수 및 .env 파일 로드 방어 규칙 (★ 최적화 세팅)
+
+1. 파이썬 스크립트 실행 위치(Cwd)에 영향을 받지 않고 프로젝트 루트인 `fintech/.env`를 정확히 조준할 수 있도록 경로 인식 코드를 설계하라.
+
+2. 현재 파일(`fintech/8.FSCcmp/code/stock_timeseries.py`)의 절대 경로 기준으로 상위 폴더 2개를 거슬러 올라가 상위 루트인 `fintech` 디렉토리를 찾아내고, 해당 경로에 위치한 `.env` 파일을 명시적으로 로드하라.
+
+   - 예시 구조: `Path(__file__).resolve().parent.parent.parent / '.env'`
+
+3. `load_dotenv(dotenv_path=env_path, override=True)`를 수행한 뒤, 보조 파서로 `utf-8-sig` 인코딩 방식을 적용해 `KEY=VALUE` 형식을 직접 한 번 더 파싱하여 `merged` 딕셔너리에 병합하라. (BOM 마크 및 dotenv 누락 철저 방어)
+
+4. 최종 키 바인딩은 `os.getenv(...)`와 `merged.get(...)`를 모두 참조하여 다음 변수를 확보하라.
+
+   - `PUBLIC_DATA_API_KEY` (공공데이터포털 인증키)
+
+5. 값이 로드에 실패하거나 빈 문자열이라면 `st.error`를 통해 "API Key가 로드되지 않았습니다. 상위 fintech/.env 파일의 PUBLIC_DATA_API_KEY 변수명과 경로를 재확인해 주세요."라는 메시지를 띄우고 하단 기능을 안전하게 차단(Safe Limit)하라.
+
+
+
+# 금융위원회 Open API 호출 및 URL 포맷 규칙
+
+- **KRX상장종목정보 엔드포인트 URL** (공공데이터포털 공식, 오퍼레이션: `getItemInfo`):
+
+  `http://apis.data.go.kr/1160100/service/GetKrxListedInfoService/getItemInfo`
+
+  - (주의) `GetKoreaStockInfoService/getCorporationCodeInfo` 는 존재하지 않아 **404 Not Found** 가 발생하므로 사용 금지.
+
+- **주식시세정보 엔드포인트 URL** (공공데이터포털 공식, 오퍼레이션: `getStockPriceInfo`):
+
+  `http://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo`
+
+  - (주의) `GetStockMarketInfoService/getStockPriceInfo` 는 존재하지 않아 **404 Not Found** 가 발생하므로 사용 금지.
+
+- **인증키 처리 주의사항**: 공공데이터포털 API는 `requests.get` 호출 시 `params` 딕셔너리에 인증키를 넣으면 내부적으로 이중 인코딩되어 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`가 발생할 수 있다. 이를 방지하기 위해 URL 주소 자체에 `?serviceKey={PUBLIC_DATA_API_KEY}`를 직접 바인딩(f-string)하고, 나머지 파라미터만 `params`로 넘기거나 전체 URL을 완성하여 호출하는 방어 코드를 작성하라.
+
+- **KRX 상장종목 마스터 수집 최적화**: `getItemInfo` 는 날짜 필터 없이 호출 시 수백만 건의 과거 이력이 반환된다. 먼저 `pageNo=1&numOfRows=1` 로 최신 `basDt`(기준일자)를 확인한 뒤, 해당 `basDt` 파라미터로 재조회하여 당일 상장 종목(약 2,700건)만 페이지네이션(`pageNo`, `numOfRows=1000`)으로 수집하라. 응답 주요 필드: `basDt`, `srtnCd`, `isinCd`, `mrktCtg`, `itmsNm`, `crno`, `corpNm`.
+
+- **주식시세 수집 파라미터**: 데이터 조회 구간은 **2026년 1월 1일 ~ 현재** (`beginBasDt=20260101`, `endBasDt=오늘 YYYYMMDD`). 종목별 조회 시 `likeItmsNm`(종목명) 또는 `likeSrtnCd`(단축코드)를 함께 사용하라. 응답 주요 필드: `basDt`, `srtnCd`, `itmsNm`, `clpr`, `vs`, `fltRt`, `hipr`, `lopr`, `trqu`.
+
+- 수집된 데이터는 Pandas DataFrame으로 변환하며, 주가 데이터는 날짜 오름차순으로 정렬하라. 응답 데이터 수가 많을 경우 페이지네이션(`pageNo`, `numOfRows=1000`)을 처리하여 구간 내 유실 없이 수집하라.
+
+- API 데이터 요청 및 수집 함수는 `@st.cache_data(ttl=1800)`으로 캐싱하라.
+
+
+
+# 필수 UI 및 기능 요구사항
+
+
+
+1. 상단 디자인 및 브랜드 로고/KPI 영역
+
+   - [상단 헤더 그라데이션 디자인 커스텀 (CSS 인젝션)]:
+
+     * Streamlit의 기본 UI 톤을 해치지 않으면서 금융 시장의 변동성(상승-레드, 하락-블루)을 상징하는 시각적 효과를 주기 위해, `st.markdown`의 `unsafe_allow_html=True` 기능을 활용하여 커스텀 CSS를 주입하라.
+
+     * 메인 타이틀 영역 직전에 HTML/CSS 요소를 활용하여, 왼쪽에서 오른쪽으로 부드럽게 이어지는 '레드-블루 그라데이션(linear-gradient(to right, #FF4B4B, #1C65E3))' 효과가 적용된 세련된 헤더 바(Header Strip)를 구현하라.
+
+     * 이 마크업은 앱이 렌더링될 때 레이아웃 깨짐을 유발하지 않도록 absolute/fixed 포지셔닝이나 고정 높이(예: 6px~8px)의 깔끔한 상단 디바이더 형태로 정밀하게 스타일링되어야 한다.
+
+   - [브랜드 로고 파일 노출 규칙]:
+
+     * 프로젝트 루트 폴더에 존재하는 로고 파일(`./fintech/logo.png`)을 절대 경로 계산식(`Path(__file__).resolve().parent.parent.parent / 'logo.png'`)으로 정확히 찾아 파일 유효성을 검증하라.
+
+     * 파일이 정상적으로 존재하면 사이드바 맨 상단 영역에 `st.sidebar.image`를 활용하여 브랜드 정체성이 드러나도록 알맞은 너비로 컴팩트하게 노출하라. 만약 로고 파일 로드 실패 시 에러 크래시 없이 패스하도록 예외 처리하라.
+
+   - 타이틀: "📈 금융위 API 기반 상장종목 시계열 주가 분석 시스템"
+
+   - 사이드바 배치 순서: ① 브랜드 로고 → ② 종목명 검색(`st.text_input`) → ③ 종목명 `st.selectbox` → ④ 제어 패널(Reset 버튼).
+
+   - 사이드바 내 로고 하단에 `금융위원회_KRX상장종목정보(getItemInfo)`로 받아온 마스터 리스트를 기반으로 **종목 검색·선택 UI**를 배치하라. (기본값: 삼성전자)
+
+     * **종목명 검색(`st.text_input`)**: 사용자가 종목명 또는 단축코드(`srtnCd`) 일부를 입력하면 마스터 리스트를 실시간 필터링하라. (예: "삼성", "NAVER", "005930")
+
+     * 검색 결과가 없으면 `st.warning`으로 안내하고, 전체 목록으로 폴백하거나 선택을 차단하지 말고 검색어 변경을 유도하라.
+
+     * 필터링된 목록을 **종목명 선택 셀렉트 박스(`st.selectbox`)**에 노출하고, 검색 결과 건수/전체 건수를 `st.caption`으로 표시하라. (예: "검색 결과 12개 / 전체 2761개")
+
+     * Reset 버튼 클릭 시 검색어(`stock_search`) 및 선택 종목 세션 상태도 함께 초기화하라.
+
+   - 종목이 선택되면 최신 일자의 주가 데이터를 호출하여 `st.metric`을 가로 레이아웃(`st.columns(3)`)으로 배치하라:
+
+     ① 현재 종가 (예: 72,500원, 전일 대비 증감 델타 표시)
+
+     ② 당일 거래량 (예: 12,450,123 주)
+
+     ③ 52주 최고가 대비 현재 위치 등 핵심 주가 정보 변동률
+
+   - KPI 하단에 해당 데이터의 기준일자를 `st.caption`으로 명시하라.
+
+
+
+2. 중앙 데이터 가공 및 기술적 지표 필터링 알고리즘
+
+   - 수집된 시계열 데이터프레임에 Pandas를 활용하여 **5일, 20일, 60일 이동평균선(SMA)** 컬럼을 계산하여 자동 추가하라.
+
+   - 데이터프레임 필터링 섹션을 두어, 사용자가 슬라이더나 라디오 버튼으로 "특정 거래량 이상 조건", "이동평균선 정배열/역배열 조건"을 설정하면 해당되는 일자만 필터링하여 하단 테이블에 노출하는 **다차원 조건 검색 알고리즘**을 구현하라.
+
+
+
+3. 주가 동향 및 거래량 복합 시각화 섹션
+
+   - Plotly 인터랙티브 차트를 활용하여 상단에는 **주가 종가 및 이동평균선 3종 꺾은선 차트**, 하단에는 **거래량 막대 차트**를 한 화면에 수직 융합 레이아웃으로 렌더링하라.
+
+   - X축 가독성 규칙: 문자열 날짜(`20260305`)를 `datetime` 객체로 변환하여 축 값으로 세팅하고, 눈금이 겹치지 않도록 포맷팅(`tickformat="%Y-%m-%d"`, `tickangle=-30`, `nticks=10`)을 철저히 적용하라.
+
+   - 보고서용 차트 저장: `보고서용 차트 저장 (HTML)` 버튼을 제공하고, 클릭 시 `./fintech/8.FSCcmp/output/charts/` 경로에 Plotly HTML 파일로 저장하라.
+
+   - 필터링된 시계열 데이터를 하단 `st.dataframe` 테이블로 노출하라.
+
+
+
+4. 사이드바 제어 패널 (종목 선택 셀렉트 박스 하단에 배치)
+
+   - '화면 초기화 (Reset)' 버튼 구현. (검색어, 선택 종목, 차트 저장 알림 등 화면 상태 초기화)
+
+
+
+# 최종 산출물 파일명 및 경로:
+
+./fintech/8.FSCcmp/code/stock_timeseries.py
+
+
+
+# 실행 방법 주석 명시:
+
+pip install streamlit plotly python-dotenv pandas requests
+
+cd fintech/8.FSCcmp
+
+streamlit run code/stock_timeseries.py
+

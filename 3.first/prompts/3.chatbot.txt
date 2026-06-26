@@ -1,0 +1,16 @@
+# 간단한 챗봇 만들기
+
+## 목적
+- Streamlit을 활용하여 간단한 챗봇을 만들기입니다.
+
+## 생성 파일명
+- chatbot.py
+
+## 요구사항
+- 화면의 타이틀은 "숭실대학교 Chatbot" 이라고 해주세요
+- 그리고, 이전 대화를 반드시 기억해주세요.
+- LLM은 gpt-4o-mini 를 사용해주세요
+- LLM 사용을 위한 API KEY는 .env에 있으니 반드시 python-dotenv의 load_dotenv()를 사용해 로드하세요.
+- .env 경로는 Castingn-AI/.env 입니다. 실행 위치와 무관하게 절대경로 기준으로 명시적으로 로드하세요.
+- 환경변수가 없으면 예외로 종료하지 말고 사용자에게 키 누락 메시지를 보여주세요.
+- 현재 LangChain 0.3버전을 사용중입니다. langchain_schema 대신 langchain_core.messages를 사용해야 합니다.

@@ -1,0 +1,52 @@
+# 간단한 인터넷 검색 챗봇 만들기
+
+## 목적
+
+- Streamlit을 활용하여 간단한 인터넷 검색 챗봇을 만들기입니다.
+
+## 생성 파일명
+
+- internet.py
+
+## 요구사항
+
+- OpenAI **GPT-5 nano** 모델과 Streamlit, **`openai` Python SDK**, LangChain **`langchain-core`(메시지 타입만)** 을 사용해 인터넷 검색이 가능한 챗봇을 만듭니다.
+
+- 웹 검색은 OpenAI **Responses API**의 내장 도구 `web_search`로 활성화합니다. `langchain_openai.ChatOpenAI.bind_tools([{"type": "web_search"}])` 는 설치된 LangChain 버전에 따라 **호스팅 도구 dict를 함수 스키마로 변환하다가 `ValueError: Unsupported function` 이 날 수 있으므로**, 실제 API 호출은 SDK로 합니다:
+
+  ```python
+  from openai import OpenAI
+
+  client = OpenAI(api_key=openai_api_key)
+  response = client.responses.create(
+      model="gpt-5-nano",
+      input="사용자 메시지",
+      tools=[{"type": "web_search"}],
+      # 이전 응답이 있으면 멀티턴:
+      # previous_response_id=이전_response의_id,
+  )
+  ```
+
+- **멀티턴**: Responses API의 `previous_response_id`에 직전 `response.id`를 넘겨 대화를 이어갑니다. 화면/상태 표현은 `HumanMessage` / `AIMessage` 로 맞춥니다.
+
+- 제목은 "🌐 Internet Search Chatbot"
+
+- 이전 대화를 기억할 수 있도록 해주세요.
+
+- LLM 사용을 위한 API KEY는 `.env`에 두며, 반드시 `python-dotenv`의 `load_dotenv()`로 로드합니다. 환경 변수 이름은 **`OPENAI_API_KEY`** 입니다.
+
+- `.env` 경로는 `Castingn-AI/.env` 입니다. 실행 위치와 무관하게 **저장소 루트(AI-Education) 기준 절대 경로**로 명시적으로 로드하세요.
+
+- 환경변수가 없으면 예외로 종료하지 말고, Streamlit에 키 누락 안내를 표시한 뒤 `st.stop()`으로 입력을 막으세요.
+
+- API 키는 `.env`에서 읽은 뒤 `.strip()`으로 앞뒤 공백을 제거하세요.
+
+- 대화 기록을 LangChain 메시지 형식으로 유지합니다:
+
+  - 사용자 메시지는 `HumanMessage(content=...)`
+
+  - AI 응답은 `AIMessage(content=...)` (Responses 출력을 텍스트·url_citation 블록 리스트 등으로 옮겨 담아도 됩니다)
+
+- 응답 `content`가 문자열이 아닌 블록 리스트인 경우, 화면에 보여 줄 때는 텍스트와 출처(인용)를 읽기 쉽게 가공하세요.
+
+- 에러 처리(특히 **401 인증 오류**, 할당량/연결 오류)와 사용자 안내를 추가하세요.

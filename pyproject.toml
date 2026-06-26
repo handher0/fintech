@@ -1,0 +1,63 @@
+[project]
+name = "fintech"
+version = "1.0.0"
+description = "핀테크 AI 실습 저장소 (Streamlit, LangChain, Supabase, 금융 데이터 분석)"
+authors = [{ name = "fintech", email = "tkdgus990809@gmail.com" }]
+requires-python = ">=3.11,<3.12"
+license = "MIT"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    # LLM / LangChain
+    "langchain>=0.3,<0.4",
+    "langchain-core>=0.3,<0.4",
+    "langchain-community>=0.3,<0.4",
+    "langchain-openai>=0.2,<0.3",
+    "langchain-anthropic>=0.2,<0.3",
+    "langchain-google-genai>=2.0,<3",
+    "langchain-text-splitters>=0.3,<0.4",
+    "langchain-teddynote>=0.3.21,<0.4",
+    "openai>=1.34,<2",
+    "python-dotenv>=1.0.1,<2",
+    "pydantic>=2.7.4,<3",
+    # Web UI
+    "streamlit>=1.32.2,<2",
+    "audio-recorder-streamlit>=0.0.10,<0.0.11",
+    # Data / visualization
+    "openpyxl>=3.1.2,<4",
+    "pandas>=2.2.2,<3",
+    "numpy>=2.0,<3",
+    "matplotlib>=3.8,<4",
+    "seaborn>=0.13,<0.14",
+    "plotly>=5.18.0,<6",
+    # Documents / PDF
+    "python-docx>=1.1.0,<2",
+    "pdfplumber>=0.11.1,<0.12",
+    "pypdf>=4.2.0,<5",
+    "reportlab>=4.2.5,<5",
+    # RAG
+    "faiss-cpu>=1.8.0,<2",
+    # Database / backend
+    "sqlalchemy>=2.0.31,<3",
+    "supabase>=2.0.0,<3",
+    # Audio (STT 모듈)
+    "pydub>=0.25.1,<0.26",
+    # Jupyter 실습
+    "jupyter>=1.0.0,<2",
+    "notebook>=7.1.2,<8",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8,<1",
+    "mypy>=1.11,<2",
+]
+
+[tool.uv]
+package = false
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -1,0 +1,52 @@
+특정주제에 대한 딥리서치
+# 목적
+- 특정주제에 대해서 딥 리서치를 해주는 코드를 짜고 싶어요
+
+# 파일명
+- deep-research.py
+
+# 방법 
+- 3개의 agent를 만듭니다 
+- internet 검색은 OpenAI **GPT-5 nano** + **Responses API** 의 **`web_search`** 도구를 사용합니다. API 키는 **`OPENAI_API_KEY`** 입니다 (Perplexity 미사용).
+- **알려진 오류:** `ChatOpenAI.bind_tools([{"type": "web_search"}])` 는 **`ValueError: Unsupported function`** 이 날 수 있으므로, 웹 검색 호출은 **`openai` SDK** `client.responses.create(model="gpt-5-nano", input=..., tools=[{"type": "web_search"}], ...)` 로 구현합니다.
+- 멀티 스텝·에이전트 간 맥락이 필요하면 각 단계의 `response.id` 를 `previous_response_id` 로 넘기거나, 검색 결과 텍스트를 다음 에이전트 프롬프트에 포함하는 방식 중 택일합니다.
+- 예시 코드·주의사항은 `3.first/prompts/4.internet.txt` 와 동일한 정책을 따릅니다.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(api_key=openai_api_key)
+response = client.responses.create(
+    model="gpt-5-nano",
+    input="리서치 질의",
+    tools=[{"type": "web_search"}],
+)
+```
+- 1번째 agent는 자료를 찾습니다. 
+	- internet 뿐아니라 https://arxiv.org/ 도 찾습니다. 
+    	- 내용을 종합합니다. 결과물을 2번 agent에게 넘겨줍니다. 
+- 2번째 agent는 
+	- 그 내용에 대한 반대의견을 찾습니다.
+	- 특히 다른 방식과 철학으로 접근하는 것을 찾습니다.
+ 	- 마찬가지로 내용을 종합합니다. 
+- 3번째 agent는 
+	- 양쪽의 결과를 소개하면서 장점 단점 이슈 등을 논의합니다
+ 	- 자신만의 결론을 내리고
+	- 향후에 이 결과로 인한 영향, 새로운 트렌드, 추가 리서치를 할 내용 등을 서술합니다. 
+
+# 화면 설계
+## 사이드 바 
+- 모델 선택
+  모델은 gpt-4o-mini, gemini-3-pro-preview, claude-sonnet-4-5
+  이 자체가 model_name 이야. 변경하지말아줘.
+- 4주차/code/ref.py를 참고해주고
+- 최종 report를 보여준 후에 다양한 토론을 할 수 있도록 해줘.
+- 리서치 진행상황을 보여주는 progressive bar 를 보여줘.
+- "리서치 시작" 버튼을 누르면, 이전에 리서치한 내용과 화면을 지우고 다시 시작해줘.
+- API Key상태는 보여주지 말아줘.
+- API key는 .env 파일에 있어.
+## 오른쪽 메인 화면
+- 타이틀 "Deep Researcher"
+- ref.py 와 같이 로고 삽입
+- 맨 아래 질문할 수 있도록 함
+

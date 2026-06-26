@@ -1,0 +1,43 @@
+# 역할
+너는 글로벌 핀테크 스타트업의 데이터 엔지니어다.
+앞서 생성한 글로벌 결제 내역 CSV 파일을 읽어 로컬 SQLite DB를 생성하고, 
+동시에 클라우드 데이터베이스인 Supabase(PostgreSQL 기반)에 데이터를 안전하게 업로드하는 Python 프로그램 및 테이블 생성용 SQL 스크립트를 작성한다.
+
+# 현재 데이터 상태
+이미 프로젝트 폴더 내에 다음 파일이 존재한다:
+./5.DatabaseSQL/data/global_payments.csv
+
+# 폴더 구조 (고정)
+- ./5.DatabaseSQL/data/     → CSV 및 로컬 SQLite DB 저장 위치
+- ./5.DatabaseSQL/code/     → Python 코드 및 SQL 파일 생성 위치
+
+# 최종 산출물 (★ 중요: Cursor가 파일 생성 기능을 활용해 다음 2개 파일을 물리적으로 폴더에 생성해야 함)
+1. ./5.DatabaseSQL/code/create_supabase_table.sql (Supabase SQL Editor 복사용 스크립트)
+2. ./5.DatabaseSQL/code/build_global_fds_db.py (데이터 정제, SQLite 저장 및 Supabase 업로드용 파이썬 코드)
+
+# 전체 작업 흐름
+1. ./5.DatabaseSQL/code/create_supabase_table.sql 파일을 먼저 생성한다.
+   - 이 파일에는 global_payments 테이블 생성(DROP, CREATE TABLE, INDEX) SQL문만 포함한다.
+   - 교육생들이 이 파일을 열어 내용을 복사한 뒤 Supabase SQL Editor에 붙여넣고 즉시 실행할 수 있도록 순수 SQL 쿼리 형태로만 깔끔하게 작성한다.
+2. ./5.DatabaseSQL/data/global_payments.csv 로드 및 기본 검증
+3. 결제 금액(Amount_USD)이 0 이하이거나 null인 행은 완전히 삭제 처리 (비정상 데이터 정제)
+4. 로컬 SQLite DB(global_fds.db)를 생성하고 데이터 insert (기존 DB 있을 시 삭제 후 재생성)
+5. Supabase 연동 및 배치 업로드 기능 구현 (NaN, 무한대 값을 None으로 완벽히 정제하여 200개씩 나눠서 대용량 insert)
+
+# Supabase 테이블 설계 (create_supabase_table.sql 및 파이썬 반영 스펙)
+테이블명: global_payments
+컬럼 (id 컬럼 없음, 인덱스 최적화 반영):
+- transaction_id (text, PK 혹은 UNIQUE 권장)
+- user_id (text)
+- timestamp (timestamp 또는 text)
+- amount_usd (real 또는 numeric)
+- country (text)
+- merchant_category (text)
+- device_ip (text)
+- is_fraud (integer)
+
+# 필수 출력 로그 및 코드 품질 요구사항
+- 파이썬 코드는 기능별 함수 단위로 구성하고 `if __name__ == "__main__": main()` 구조를 명확히 지킬 것.
+- 각 단계별로 진행 상황을 터미널에 상세히 출력하는 print문과 예외 처리(Try-Except)를 필수 적용할 것.
+- Supabase 라이브러리(`supabase-py`)를 사용해 클라우드에 데이터를 올릴 때, numpy 결측치(NaN, Inf)로 인해 오류가 나지 않도록 사전에 `None`으로 치환하는 방어 코드를 철저히 적용할 것.
+- 코드 상단이나 환경 변수 설정 부분에 Supabase URL과 API Key를 입력할 수 있는 플레이스홀더(`YOUR_SUPABASE_URL`, `YOUR_SUPABASE_KEY`)를 직관적으로 만들어 둘 것.
